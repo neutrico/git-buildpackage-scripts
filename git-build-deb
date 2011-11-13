@@ -1,0 +1,195 @@
+#!/bin/sh
+
+# set -ex
+
+git checkout master
+
+if [ -r "/etc/default/git-build-deb" ]; then
+    . /etc/default/git-build-deb
+fi
+
+if [ -r "debian/changelog" ]; then
+    DEB_SRC=$(dpkg-parsechangelog | grep Source: | cut -d ' ' -f2)
+    DEB_VER=$(dpkg-parsechangelog | grep Version: | cut -d ' ' -f2)
+    DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
+    VCS_GIT=$(grep 'Vcs-Git:' debian/control | cut -d ' ' -f2)
+    SRC_GIT=$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)
+    SRC_BRANCH=$(grep 'Upstream-Name: ' debian/copyright | cut -d ' ' -f2)
+
+    if [ -z "${DIST}" ] && [ -r "debian/changelog" ]; then
+	DIST=`dpkg-parsechangelog | grep Distribution: | cut -d ' ' -f2`
+    fi
+    if [ -z "${ARCH}" ]; then
+	: ${ARCH:="$(dpkg --print-architecture)"}
+    fi
+else
+    echo "This is not package directory. Exiting"
+    exit 1
+fi
+
+echo " ##### Source name: $DEB_SRC \n ##### Version: $DEB_VER \n "
+echo " ##### Release: $DEB_REL \n ##### Codename: $DIST \n "
+
+CUR_DIR=$(pwd)
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+git --no-pager push -v --tags
+
+if [ -n "$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf)" ]; then
+    TAR_DIR="$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf | cut -d '=' -f2)"
+    if [ -n "$( echo $TAR_DIR | grep '^/')" ]; then
+	TAR_PATH=$TAR_DIR
+    else
+	TAR_PATH=$CUR_DIR/$TAR_DIR
+    fi
+else
+    TAR_PATH=$CUR_DIR/../
+fi
+
+if [ -n $GIT_SRC ]; then
+    if [ -d $CACHE_DIR/$DEB_SRC ]; then
+	cd $CACHE_DIR/$DEB_SRC
+	git pull 
+    else 
+	git clone --progress $SRC_GIT $CACHE_DIR/$DEB_SRC
+	cd $CACHE_DIR/$DEB_SRC
+    fi
+    if [ -n "$1" ]; then
+	TAG=$1
+	BLD_VER=$1
+    else
+	TAGS=`git show-ref --tags | wc -l`
+	GIT_ID=`git log --pretty=%h -n1`
+	if [ $TAGS -gt 0 ]; then 
+	    TAG=`git describe --tags`
+	    GIT_VER=`echo $TAG | cut -d '-' -f1`
+	    GIT_REL=`echo $TAG | cut -d '-' -f2`
+	    if [ -n $GIT_REL ]; then 
+		TAG=HEAD
+		BLD_VER=$GIT_VER-$GIT_REL~$GIT_ID
+	    else
+		BLD_VER=$GIT_VER
+	    fi
+	else
+	    TAG=HEAD
+	    if [ -f .git/refs/heads/$SRC_BRANCH ]; then 
+		TAG=$SRC_BRANCH
+	    fi
+ 	    GIT_VER=0
+ 	    GIT_REL=`git rev-list --all | wc -l`
+ 	    BLD_VER=$GIT_VER-$GIT_REL~$GIT_ID
+	fi
+    fi
+fi
+
+cd $CUR_DIR
+
+if ! git show-ref --tags --quiet --verify -- "refs/tags/upstream/$(echo $BLD_VER | sed 's/~/_/g')"
+then
+    if [ ! -r $TAR_PATH$DEB_SRC\_$BLD_VER.tar.gz ]; then
+	cd $CACHE_DIR/$DEB_SRC
+	git archive --format tar --prefix $DEB_SRC-$BLD_VER/ $TAG | gzip -9 > $TAR_PATH$DEB_SRC\_$BLD_VER.orig.tar.gz
+	cd $CUR_DIR
+    fi
+    git-import-orig -u$BLD_VER $TAR_PATH$DEB_SRC\_$BLD_VER.orig.tar.gz
+    git push $VCS_GIT --tags
+fi
+
+if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
+    DEB_BLD=1
+    dch -pMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+else
+    if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
+    then
+	DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+	dch -pMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+    fi
+fi
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+
+git-buildpackage --git-retag --git-tag-only
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+
+
+for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
+do
+
+    DIST=$x
+    echo " \n ##### Prepare for: $DIST ##### \n "
+
+    if [ -z "${ARCH}" ]; then
+	: ${ARCH:="$(dpkg --print-architecture)"}
+    fi
+
+    if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then
+	if [ -n "`debian-distro-info --all | grep $DIST`" ]; then
+	    MIRRORSITE="http://$DEBIAN_MIRROR/debian/"
+	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
+	elif [ -n "`ubuntu-distro-info --all | grep $DIST`" ]; then
+	    MIRRORSITE="http://$UBUNTU_MIRROR/ubuntu/"
+	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+	else 
+	    echo "Distribution: Unknown"
+	    exit 1
+	fi
+	
+	DIST=$DIST ARCH=$ARCH git-pbuilder create --mirror $MIRRORSITE $DEBOOTSTRAPOPTS
+    fi
+
+    git checkout -q $DIST
+
+    DEB_VER=$(dpkg-parsechangelog | grep Version: | cut -d ' ' -f2)
+    DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
+
+    if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
+	DEB_BLD=1
+	dch -pMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+    else
+	if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
+	then
+	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+	    dch -pMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+	fi
+    fi
+
+    git add .
+    git commit --allow-empty --allow-empty-message -m '' .
+    git merge master
+    git add .
+    git commit --allow-empty --allow-empty-message -m '' .
+    git push $VCS_GIT
+done
+
+for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
+do
+    DIST=$x
+    echo " \n ##### Building for: $DIST ##### \n "
+
+    git checkout $DIST
+    POST="debian/rules clean"
+    TAG="git push $VCS_GIT --tags && reprepro -s includedeb $DIST ../$DEB_SRC\_$DEB_VER\_*.deb && rm -rf ../$DEB_SRC\_$DEB_VER*"
+    OPT="--override-config --configfile /etc/pbuilder/git-buildpackage-scripts.conf --distribution $DIST"
+    if [ -f .git/refs/heads/$x ]; then
+	GIT_PBUILDER_OPTIONS=$OPT DIST=$x git-buildpackage --git-pbuilder \
+	    --git-dist=$x \
+	    --git-arch=amd64 \
+	    --git-retag \
+	    --git-tag \
+	    --git-posttag=$TAG \
+	    --git-postbuild="$POST"
+    fi
+done
+
+git checkout master
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git push $VCS_GIT --all
+git push $VCS_GIT --tags
