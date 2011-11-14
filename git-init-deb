@@ -20,14 +20,16 @@ git-import-orig -u0 ../$1\_0.orig.tar.gz
 
 dh_make -c $pkg_license -i -p $1
 
+tester="kurde4\n kurde5 \n kurde6\n"
+
 sed -i "s/<url:\/\/example.com>/$repo/g" debian/copyright
 sed -i 's/Section: unknown/Section: '$section'/g' debian/control
 sed -i 's/<insert the upstream URL, if relevant>/'$homepage'/g' debian/control
 sed -i 's/#Vcs-Git: *.*.git$/Vcs-Git: ssh:\/\/git@github.com\/'$githubid'\/deb-'$1'.git/g' debian/control
 sed -i 's/#Vcs-Browser: *.*summary$/Vcs-Browser: https:\/\/github.com\/'$githubid'\/deb-'$1'/g' debian/control
 sed -i "/^Build-Depends/s/$/\, $(echo $build_dependencies | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
-sed -i "s/<insert up to 60 chars description>/$(echo $short_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/g" debian/control
-sed -i "s/<insert long description, indented with spaces>/$(echo $long_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/g" debian/control
+sed -i "s/<insert up to 60 chars description>/$(echo $short_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
+sed -i "s/<insert long description, indented with spaces>/$long_description/" debian/control
 
 echo "changelog merge=keepmine" > debian/.gitattributes
 echo "compat    merge=keepmine" >> debian/.gitattributes
@@ -60,7 +62,6 @@ do
 	git add .
 	git commit -m "Intial $x commit"
 	git checkout master
-	# reprepro -s removesrc $x $1
     fi
 done
 
