@@ -32,11 +32,6 @@ echo " ##### Release: $DEB_REL \n ##### Codename: $DIST \n "
 
 CUR_DIR=$(pwd)
 
-git add .
-git commit --allow-empty --allow-empty-message -m '' .
-git --no-pager push -v origin master:refs/heads/master
-git --no-pager push -v --tags
-
 if [ -n "$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf)" ]; then
     TAR_DIR="$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf | cut -d '=' -f2)"
     if [ -n "$( echo $TAR_DIR | grep '^/')" ]; then
@@ -85,6 +80,11 @@ if [ -n $GIT_SRC ]; then
 fi
 
 cd $CUR_DIR
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+git --no-pager push -v --tags
 
 if ! git show-ref --tags --quiet --verify -- "refs/tags/upstream/$(echo $BLD_VER | sed 's/~/_/g')"
 then
@@ -157,7 +157,7 @@ do
     else
 	if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
 	then
-	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+#	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
 	    dch -pMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
 	fi
     fi
