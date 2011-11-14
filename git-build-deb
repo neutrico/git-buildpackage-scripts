@@ -176,7 +176,7 @@ do
     echo " \n ##### Building for: $DIST ##### \n "
 
     git checkout $DIST
-    TAG="git push --tags && reprepro -s includedeb $DIST ../$DEB_SRC\_$DEB_VER\_*.deb && rm -rf ../$DEB_SRC\_$DEB_VER*"
+    TAG="git push --tags && reprepro -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
     OPT="--override-config --configfile /etc/pbuilder/git-buildpackage-scripts.conf --distribution $DIST"
     if [ -f .git/refs/heads/$x ]; then
 	GIT_PBUILDER_OPTIONS=$OPT DIST=$x git-buildpackage --git-pbuilder \
@@ -184,7 +184,7 @@ do
 	    --git-arch=amd64 \
 	    --git-retag \
 	    --git-tag \
-	    --git-posttag=$TAG
+	    --git-posttag="$TAG"
     fi
 done
 
