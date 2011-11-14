@@ -1,11 +1,11 @@
 #!/bin/sh
 
-# set -ex
+set -ex
 
 git checkout master
 
-if [ -r "/etc/default/git-build-deb" ]; then
-    . /etc/default/git-build-deb
+if [ -r "/etc/default/git-buildpackage-scripts" ]; then
+    . /etc/default/git-buildpackage-scripts
 fi
 
 if [ -r "debian/changelog" ]; then
@@ -129,19 +129,21 @@ do
 	: ${ARCH:="$(dpkg --print-architecture)"}
     fi
 
-    if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then
-	if [ -n "`debian-distro-info --all | grep $DIST`" ]; then
-	    MIRRORSITE="http://$DEBIAN_MIRROR/debian/"
-	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
-	elif [ -n "`ubuntu-distro-info --all | grep $DIST`" ]; then
-	    MIRRORSITE="http://$UBUNTU_MIRROR/ubuntu/"
-	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
-	else 
-	    echo "Distribution: Unknown"
-	    exit 1
-	fi
-	
+    if [ -n "`debian-distro-info --all | grep $DIST`" ]; then
+	MIRRORSITE="http://$DEBIAN_MIRROR/debian/"
+	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
+    elif [ -n "`ubuntu-distro-info --all | grep $DIST`" ]; then
+	MIRRORSITE="http://$UBUNTU_MIRROR/ubuntu/"
+	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+    else 
+	echo "Distribution: Unknown"
+	exit 1
+    fi
+
+    if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then	
 	DIST=$DIST ARCH=$ARCH git-pbuilder create --mirror $MIRRORSITE $DEBOOTSTRAPOPTS
+    else
+	DIST=$DIST ARCH=$ARCH git-pbuilder update --mirror $MIRRORSITE $DEBOOTSTRAPOPTS
     fi
 
     git checkout -q $DIST
@@ -174,7 +176,6 @@ do
     echo " \n ##### Building for: $DIST ##### \n "
 
     git checkout $DIST
-    POST="debian/rules clean"
     TAG="git push $VCS_GIT --tags && reprepro -s includedeb $DIST ../$DEB_SRC\_$DEB_VER\_*.deb && rm -rf ../$DEB_SRC\_$DEB_VER*"
     OPT="--override-config --configfile /etc/pbuilder/git-buildpackage-scripts.conf --distribution $DIST"
     if [ -f .git/refs/heads/$x ]; then
@@ -183,8 +184,7 @@ do
 	    --git-arch=amd64 \
 	    --git-retag \
 	    --git-tag \
-	    --git-posttag=$TAG \
-	    --git-postbuild="$POST"
+	    --git-posttag=$TAG
     fi
 done
 
