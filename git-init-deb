@@ -34,8 +34,8 @@ echo "compat    merge=keepmine" >> debian/.gitattributes
 echo "control   merge=keepmine" >> debian/.gitattributes
 echo "gbp.conf  merge=keepmine" >> debian/.gitattributes
 
-mkdir -p debian/patches
-touch debian/patches/series
+#mkdir -p debian/patches
+#touch debian/patches/series
 
 rm -rf debian/*.ex
 rm -rf debian/*.EX
