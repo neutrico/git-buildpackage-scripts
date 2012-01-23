@@ -175,8 +175,17 @@ do
     DIST=$x
     echo " \n ##### Building for: $DIST ##### \n "
 
+    if [ -n "$(debian-distro-info --all | grep $DIST)" ]; then
+	CONFDIR="/etc/reprepro/debian/"
+    elif [ -n "$(ubuntu-distro-info --all | grep $DIST)" ]; then
+	CONFDIR="/etc/reprepro/ubuntu/"
+    else 
+	echo "Distribution: Unknown"
+	exit 1
+    fi
+
     git checkout $DIST
-    TAG="git push --tags && reprepro -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
+    TAG="git push --tags && reprepro --confdir $CONFDIR -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
     OPT="--override-config --configfile /etc/pbuilder/git-buildpackage-scripts.conf --distribution $DIST"
     if [ -f .git/refs/heads/$x ]; then
 	GIT_PBUILDER_OPTIONS=$OPT DIST=$x git-buildpackage --git-pbuilder \
