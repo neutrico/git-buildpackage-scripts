@@ -18,9 +18,7 @@ cd $1-0
 git init
 git-import-orig -u0 ../$1\_0.orig.tar.gz
 
-dh_make -c $pkg_license -i -p $1
-
-tester="kurde4\n kurde5 \n kurde6\n"
+dh_make -c $license -i -p $1
 
 sed -i "s/<url:\/\/example.com>/$repo/g" debian/copyright
 sed -i 's/Section: unknown/Section: '$section'/g' debian/control
@@ -45,7 +43,8 @@ rm -rf debian/*.EX
 git add .
 git commit -m "Initial commit"
 
-for x in `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` `debian-distro-info --stable` `debian-distro-info --devel`
+#for x in `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` `debian-distro-info --stable` `debian-distro-info --devel`
+for x in $dists
 do
     echo "initializing for $x"
     if [ ! -f .git/refs/heads/$x ]; then
