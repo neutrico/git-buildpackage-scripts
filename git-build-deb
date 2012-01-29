@@ -133,7 +133,7 @@ echo "Wersja bieżąca: $DEB_VER"
 
 if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
     DEB_BLD=1
-    dch -pMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+    dch -bpMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
     echo "New upstream version import: $CYAN$BLD_VER-1~$DIST$DEB_BLD$NO_COL \n"
 else
     echo "Wersje równe - robimy tylko builda: $(echo $DEB_VER | sed 's/~/_/g')"
@@ -141,7 +141,7 @@ else
     if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
     then
 	DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
-	dch -pMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+	dch -bpMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
     fi
     echo "New build: $CYAN$BLD_VER-1~$DIST$((DEB_BLD+1))$NO_COL\n"
 fi
@@ -193,12 +193,12 @@ do
 	
 	if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
 	    DEB_BLD=1
-	    dch -pMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+	    dch -bpMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
 	else
 	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
 	    if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
 	    then
-		dch -pMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+		dch -bpMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
 	    fi
 	fi
 
