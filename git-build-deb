@@ -171,32 +171,24 @@ do
 	    : ${ARCH:="$(dpkg --print-architecture)"}
 	fi
 
+	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/etc/apt/trusted.gpg"
 	if [ -n "$(debian-distro-info --all | grep $DIST)" ]; then
-	    MIRRORSITE="http://$DEBIAN_MIRROR/debian/"
-	    COMPONENTS="main contrib non-free"
-	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
+	    DIST_TYPE="debian"
 	elif [ -n "$(ubuntu-distro-info --all | grep $DIST)" ]; then
-	    MIRRORSITE="http://$UBUNTU_MIRROR/ubuntu/"
-	    COMPONENTS="main restricted universe multiverse"
-	    DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
-	else 
-	    echo "Distribution: Unknown"
-	    exit 1
+	    DIST_TYPE="ubuntu"
 	fi
-	
+
 	if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then	
-	    echo "Pobranie i instalacja obrazu dystrybucji"
-	    DIST=$DIST ARCH=$ARCH git-pbuilder create --mirror $MIRRORSITE --components "$COMPONENTS" $DEBOOTSTRAPOPTS
+	    echo "$RED Pobranie i instalacja obrazu dystrybucji: $DIST$NO_COL"
+	    DIST=$DIST ARCH=$ARCH git-pbuilder create --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE.conf --override-config $DEBOOTSTRAPOPTS
 	else
-	    echo "Aktualizuje obrazu dystrybucji"
-	    DIST=$DIST ARCH=$ARCH git-pbuilder update --mirror $MIRRORSITE --components "$COMPONENTS" $DEBOOTSTRAPOPTS
+	    echo "$RED Aktualizacja obrazu dystrybucji: $DIST$NO_COL"
+	    DIST=$DIST ARCH=$ARCH git-pbuilder update --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE.conf --override-config $DEBOOTSTRAPOPTS
 	fi
-	
+
  	git checkout -q $DIST
 
-	DEB_VER=$(dpkg-parsechangelog | grep Version: | cut -d ' ' -f2)
 	echo Version: $DEB_VER
-	DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
 	echo Release: $DEB_REL
 	
 	if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
@@ -216,32 +208,17 @@ do
 	git add .
 	git commit --allow-empty --allow-empty-message -m '' .
 	git push $VCS_GIT
-    fi
-done
 
-for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
-do
+	if [ -f .git/refs/heads/$DIST ]; then 
+	    echo " \nBuilding for: $CYAN$DIST$NO_COL \n "
+	    git checkout $DIST
+	    TAG="git push --tags && reprepro --confdir /etc/reprepro/$DIST_TYPE -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
 
-    DIST=$x
-    
-    if [ -n "$(debian-distro-info --all | grep $DIST)" ]; then
-	CONFDIR="/etc/reprepro/debian/"
-    elif [ -n "$(ubuntu-distro-info --all | grep $DIST)" ]; then
-	CONFDIR="/etc/reprepro/ubuntu/"
-    else 
-	echo "Distribution: Unknown"
-	exit 1
-    fi
-    
-    if [ -f .git/refs/heads/$DIST ]; then 
-	echo " \nBuilding for: $CYAN$DIST$NO_COL \n "
-	git checkout $DIST
-	TAG="git push --tags && reprepro --confdir $CONFDIR -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
-	OPT="--override-config --configfile /etc/pbuilder/git-buildpackage-scripts.conf --distribution $DIST"
-	if [ -f .git/refs/heads/$x ]; then
-	    GIT_PBUILDER_OPTIONS=$OPT DIST=$x git-buildpackage --git-pbuilder \
+	    GIT_PBUILDER_OPTIONS="--configfile /etc/pbuilder/$DIST_TYPE.conf" DIST="$DIST" git-buildpackage \
+		--git-pbuilder \
 		--git-dist=$x \
 		--git-arch=amd64 \
+		--git-verbose \
 		--git-retag \
 		--git-tag \
 		--git-posttag="$TAG"

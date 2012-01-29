@@ -1,2 +1,3 @@
 #!/bin/bash
-apt-get update
+apt-get -y update
+apt-get -y install debhelper fakeroot sudo devscripts apt-utils
