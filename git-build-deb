@@ -79,7 +79,7 @@ if [ -n "$SRC_GIT" ]; then
     # when in cache directory - get tag ids
     if [ -n "$1" ]; then
 	TAG=$1
-	BLD_VER=$1
+	BLD_VER=$2
     else
 	TAGS=`git show-ref --tags | wc -l`
 	GIT_ID=`git log --pretty=%h -n1`
