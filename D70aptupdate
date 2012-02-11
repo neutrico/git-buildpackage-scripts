@@ -1,3 +1,4 @@
 #!/bin/bash
+apt-key add /usr/share/keyrings/neutrico/master-keyring.gpg
 apt-get -y update
 apt-get -y install debhelper fakeroot sudo devscripts apt-utils

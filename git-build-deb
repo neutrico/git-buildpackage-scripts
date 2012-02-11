@@ -171,7 +171,7 @@ do
 	    : ${ARCH:="$(dpkg --print-architecture)"}
 	fi
 
-	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/etc/apt/trusted.gpg"
+	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/neutrico/master-keyring.gpg"
 	if [ -n "$(debian-distro-info --all | grep $DIST)" ]; then
 	    DIST_TYPE="debian"
 	elif [ -n "$(ubuntu-distro-info --all | grep $DIST)" ]; then
@@ -180,10 +180,10 @@ do
 
 	if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then	
 	    echo "$RED Pobranie i instalacja obrazu dystrybucji: $DIST$NO_COL"
-	    DIST=$DIST ARCH=$ARCH git-pbuilder create --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE.conf --override-config $DEBOOTSTRAPOPTS
+	    DIST=$DIST ARCH=$ARCH git-pbuilder create --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf --override-config $DEBOOTSTRAPOPTS
 	else
 	    echo "$RED Aktualizacja obrazu dystrybucji: $DIST$NO_COL"
-	    DIST=$DIST ARCH=$ARCH git-pbuilder update --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE.conf --override-config $DEBOOTSTRAPOPTS
+	    DIST=$DIST ARCH=$ARCH git-pbuilder update --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf --override-config $DEBOOTSTRAPOPTS
 	fi
 
  	git checkout -q $DIST
@@ -212,9 +212,9 @@ do
 	if [ -f .git/refs/heads/$DIST ]; then 
 	    echo " \nBuilding for: $CYAN$DIST$NO_COL \n "
 	    git checkout $DIST
-	    TAG="git push --tags && reprepro --confdir /etc/reprepro/$DIST_TYPE -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
+	    TAG="git push --tags && reprepro --confdir /etc/reprepro/$DIST -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
 
-	    GIT_PBUILDER_OPTIONS="--configfile /etc/pbuilder/$DIST_TYPE.conf" DIST="$DIST" git-buildpackage \
+	    GIT_PBUILDER_OPTIONS="--configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf" DIST="$DIST" git-buildpackage \
 		--git-pbuilder \
 		--git-dist=$x \
 		--git-arch=amd64 \
