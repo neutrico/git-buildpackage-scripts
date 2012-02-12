@@ -27,7 +27,7 @@ if [ -r "debian/changelog" ]; then
     DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
     VCS_GIT=$(grep 'Vcs-Git:' debian/control | cut -d ' ' -f2)
     SRC_GIT=$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)
-    echo Repository: $LIGHT_GRAY$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)$NO_COL\n
+    echo Repository: $LIGHT_GRAY$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)$NO_COL
     SRC_BRANCH=$(grep 'Upstream-Name: ' debian/copyright | cut -d ' ' -f2)
 
     if [ -z "${DIST}" ] && [ -r "debian/changelog" ]; then
@@ -160,10 +160,13 @@ git --no-pager push -v origin master:refs/heads/master
 for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
 do
 
+    echo "Co kurwa?" $x
+
     DIST=$x
 
     # this will detect unused distros and omit them
-    if [ -f .git/refs/heads/$DIST ]; then 
+#    if [ -f .git/refs/heads/$DIST ]; then 
+    if [ $(git branch | grep "$DIST") ]; then
 
 	echo " \nPrepare for: $CYAN$DIST$NO_COL \n "
 
