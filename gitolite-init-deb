@@ -1,49 +1,39 @@
 #!/bin/sh
 
- set -ex
+set -ex
 
 [ -r ../deb-$1.properties ] && . ../deb-$1.properties
 
 # initial properties
-repo=`echo $source | sed -e 's#/#\\\/#g'`
-homepage=`echo $url | sed -e 's#/#\\\/#g'`
-githubid=$(git config --get github.user)
+repo=$(echo $source | sed -e 's#/#\\\/#g')
+homepage=$(echo $url | sed -e 's#/#\\\/#g')
 
 tar -czvf $1_0.orig.tar.gz --files-from /dev/null
 
-rm -rf $1-0
-mkdir -p $1-0
+git clone git@localhost:deb-$1.git
+
+mv deb-$1 $1-0
 cd $1-0
 
-git init
 git-import-orig -u0 ../$1\_0.orig.tar.gz
 
-dh_make -c $license -i -p $1
+dh_make -d -t /usr/share/debhelper/dh_make/neutrico-$license -e $(git config --get user.email) -p $1
 
-sed -i "s/<url:\/\/example.com>/$repo/g" debian/copyright
-sed -i 's/Section: unknown/Section: '$section'/g' debian/control
-sed -i 's/<insert the upstream URL, if relevant>/'$homepage'/g' debian/control
-sed -i 's/#Vcs-Git: *.*.git$/Vcs-Git: ssh:\/\/git@github.com\/'$githubid'\/deb-'$1'.git/g' debian/control
-sed -i 's/#Vcs-Browser: *.*summary$/Vcs-Browser: https:\/\/github.com\/'$githubid'\/deb-'$1'/g' debian/control
+sed -i "s/#SOURCE#/$repo/g" debian/copyright
+sed -i 's/#SECTION#/'$section'/g' debian/control
+sed -i 's/#HOMEPAGE#/'$homepage'/g' debian/control
 sed -i "/^Build-Depends/s/$/\, $(echo $build_dependencies | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
-sed -i "s/<insert up to 60 chars description>/$(echo $short_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
-sed -i "s/<insert long description, indented with spaces>/$long_description/" debian/control
+sed -i "s/#SHORT_DESCRIPTION#/$(echo $short_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
+sed -i "s/#LONG_DESCRIPTION#/$long_description/" debian/control
 
 echo "changelog merge=keepmine" > debian/.gitattributes
 echo "compat    merge=keepmine" >> debian/.gitattributes
 echo "control   merge=keepmine" >> debian/.gitattributes
 echo "gbp.conf  merge=keepmine" >> debian/.gitattributes
 
-#mkdir -p debian/patches
-#touch debian/patches/series
-
-rm -rf debian/*.ex
-rm -rf debian/*.EX
-
 git add .
 git commit -m "Initial commit"
 
-#for x in `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` `debian-distro-info --stable` `debian-distro-info --devel`
 for x in $dists
 do
     echo "initializing for $x"
@@ -64,9 +54,7 @@ do
     fi
 done
 
-git remote add origin git@github.com:marcinant/deb-$1.git
-git push -q -u origin master
-git push -q --all
-git push -q --tags
-
 mv -f ../$1-0 ../deb-$1
+
+git push --all
+git push --tags

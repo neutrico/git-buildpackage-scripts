@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -e
+set -ex
 
 local GRAY="\[\033[1;30m\]"
 local LIGHT_GRAY="\033[0;37m"
@@ -24,8 +24,10 @@ fi
 if [ -r "debian/changelog" ]; then
     DEB_SRC=$(dpkg-parsechangelog | grep Source: | cut -d ' ' -f2)
     DEB_VER=$(dpkg-parsechangelog | grep Version: | cut -d ' ' -f2)
+    DEB_BASE_VER=$(echo $DEB_VER | cut -d '-' -f1)
     DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
-    VCS_GIT=$(grep 'Vcs-Git:' debian/control | cut -d ' ' -f2)
+    PROJ_NAME=$(grep 'Vcs-Git: git://' debian/control | cut -d '/' -f4)
+    VCS_GIT="ssh://git@git.neutrico.pl/"$PROJ_NAME
     SRC_GIT=$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)
     echo Repository: $LIGHT_GRAY$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)$NO_COL
     SRC_BRANCH=$(grep 'Upstream-Name: ' debian/copyright | cut -d ' ' -f2)
@@ -160,12 +162,11 @@ git --no-pager push -v origin master:refs/heads/master
 for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
 do
 
-    echo "Co kurwa?" $x
+    echo $x
 
     DIST=$x
 
     # this will detect unused distros and omit them
-#    if [ -f .git/refs/heads/$DIST ]; then 
     if [ $(git branch | grep "$DIST") ]; then
 
 	echo " \nPrepare for: $CYAN$DIST$NO_COL \n "
@@ -197,6 +198,7 @@ do
 	if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
 	    DEB_BLD=1
 	    dch -bpMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+	    rm -rf ../$DEB_SRC\_$DEB_BASE_VER.orig.*
 	else
 	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
 	    if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
@@ -215,7 +217,7 @@ do
 	if [ -f .git/refs/heads/$DIST ]; then 
 	    echo " \nBuilding for: $CYAN$DIST$NO_COL \n "
 	    git checkout $DIST
-	    TAG="git push --tags && reprepro --confdir /etc/reprepro/$DIST -s includedeb $DIST ../$DEB_SRC\_*$DIST*\_*.deb && rm -rf ../$DEB_SRC\_*$DIST*"
+	    TAG="git push --tags"
 
 	    GIT_PBUILDER_OPTIONS="--configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf" DIST="$DIST" git-buildpackage \
 		--git-pbuilder \
@@ -225,6 +227,12 @@ do
 		--git-retag \
 		--git-tag \
 		--git-posttag="$TAG"
+
+	    for p in $(grep Package: debian/control | cut -d ' ' -f2)
+	    do 
+		echo Including deb package to repository: $p
+		reprepro --confdir /etc/reprepro/$DIST -s includedeb $DIST ../$p\_*$DIST*\_*.deb && rm -rf ../$p\_*$DIST*;
+	    done
 	fi
     fi
 done
