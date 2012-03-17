@@ -70,3 +70,4 @@ git push -q --all
 git push -q --tags
 
 mv -f ../$1-0 ../deb-$1
+

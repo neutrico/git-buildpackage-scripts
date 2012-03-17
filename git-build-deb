@@ -234,3 +234,4 @@ git add .
 git commit --allow-empty --allow-empty-message -m '' .
 git push $VCS_GIT --all
 git push $VCS_GIT --tags
+
