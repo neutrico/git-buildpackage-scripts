@@ -1,0 +1,73 @@
+#!/bin/sh
+
+ set -ex
+
+[ -r ../deb-$1.properties ] && . ../deb-$1.properties
+
+# initial properties
+repo=`echo $source | sed -e 's#/#\\\/#g'`
+homepage=`echo $url | sed -e 's#/#\\\/#g'`
+githubid=$(git config --get github.user)
+
+tar -czvf $1_0.orig.tar.gz --files-from /dev/null
+
+rm -rf $1-0
+mkdir -p $1-0
+cd $1-0
+
+git init
+git-import-orig -u0 ../$1\_0.orig.tar.gz
+
+dh_make -c $license -i -p $1
+
+sed -i "s/<url:\/\/example.com>/$repo/g" debian/copyright
+sed -i 's/Section: unknown/Section: '$section'/g' debian/control
+sed -i 's/<insert the upstream URL, if relevant>/'$homepage'/g' debian/control
+sed -i 's/#Vcs-Git: *.*.git$/Vcs-Git: ssh:\/\/git@github.com\/'$githubid'\/deb-'$1'.git/g' debian/control
+sed -i 's/#Vcs-Browser: *.*summary$/Vcs-Browser: https:\/\/github.com\/'$githubid'\/deb-'$1'/g' debian/control
+sed -i "/^Build-Depends/s/$/\, $(echo $build_dependencies | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
+sed -i "s/<insert up to 60 chars description>/$(echo $short_description | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')/" debian/control
+sed -i "s/<insert long description, indented with spaces>/$long_description/" debian/control
+
+echo "changelog merge=keepmine" > debian/.gitattributes
+echo "compat    merge=keepmine" >> debian/.gitattributes
+echo "control   merge=keepmine" >> debian/.gitattributes
+echo "gbp.conf  merge=keepmine" >> debian/.gitattributes
+
+#mkdir -p debian/patches
+#touch debian/patches/series
+
+rm -rf debian/*.ex
+rm -rf debian/*.EX
+
+git add .
+git commit -m "Initial commit"
+
+#for x in `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` `debian-distro-info --stable` `debian-distro-info --devel`
+for x in $dists
+do
+    echo "initializing for $x"
+    if [ ! -f .git/refs/heads/$x ]; then
+	git checkout -b $x
+	echo "[DEFAULT]" > debian/gbp.conf
+	echo "debian-branch = $x" >> debian/gbp.conf
+	echo "changelog merge=keepmine" > debian/.gitattributes
+	echo "compat    merge=keepmine" >> debian/.gitattributes
+	echo "control   merge=keepmine" >> debian/.gitattributes
+	echo "gbp.conf  merge=keepmine" >> debian/.gitattributes
+	rm -rf debian/changelog
+	bld=1
+	dch -p -D $x -v 0-0~$x$bld -M --package $1 --create --force-distribution "Initial release"
+	git add .
+	git commit -m "Intial $x commit"
+	git checkout master
+    fi
+done
+
+git remote add origin git@github.com:marcinant/deb-$1.git
+git push -q -u origin master
+git push -q --all
+git push -q --tags
+
+mv -f ../$1-0 ../deb-$1
+

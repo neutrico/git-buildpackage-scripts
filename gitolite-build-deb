@@ -1,0 +1,245 @@
+#!/bin/sh
+
+set -ex
+
+local GRAY="\[\033[1;30m\]"
+local LIGHT_GRAY="\033[0;37m"
+local CYAN="\033[0;36m"
+local RED="\033[0;31m"
+local LIGHT_CYAN="\[\033[1;36m\]"
+local NO_COL="\033[0m"
+
+# set config variables to use keepmine in .gitattributes on merge
+git config --replace-all merge.keepmine.name dont_merge_selected_files
+git config --replace-all merge.keepmine.driver 'echo %O %A %B'
+
+# switch to master branch on start
+git checkout master
+
+if [ -r "/etc/default/git-buildpackage-scripts" ]; then
+    . /etc/default/git-buildpackage-scripts
+fi
+
+# get variables from changelog
+if [ -r "debian/changelog" ]; then
+    DEB_SRC=$(dpkg-parsechangelog | grep Source: | cut -d ' ' -f2)
+    DEB_VER=$(dpkg-parsechangelog | grep Version: | cut -d ' ' -f2)
+    DEB_BASE_VER=$(echo $DEB_VER | cut -d '-' -f1)
+    DEB_REL=$(dpkg-parsechangelog | grep Version: | sed '/^Version/!d; s/.*-//;')
+    PROJ_NAME=$(grep 'Vcs-Git: git://' debian/control | cut -d '/' -f4)
+    VCS_GIT="ssh://git@git.neutrico.pl/"$PROJ_NAME
+    SRC_GIT=$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)
+    echo Repository: $LIGHT_GRAY$(grep 'Source: git' debian/copyright | cut -d ' ' -f2)$NO_COL
+    SRC_BRANCH=$(grep 'Upstream-Name: ' debian/copyright | cut -d ' ' -f2)
+
+    if [ -z "${DIST}" ] && [ -r "debian/changelog" ]; then
+	DIST=`dpkg-parsechangelog | grep Distribution: | cut -d ' ' -f2`
+    fi
+    if [ -z "${ARCH}" ]; then
+	: ${ARCH:="$(dpkg --print-architecture)"}
+    fi
+else
+    echo "This is not package directory. Exiting"
+    exit 1
+fi
+
+echo "Source:     $RED$DEB_SRC$NO_COL \nVersion:    $RED$DEB_VER$NO_COL \n "
+echo "Release:    $CYAN$DEB_REL$NO_COL \nCodename:   $CYAN$DIST$NO_COL \n "
+
+CUR_DIR=$(pwd)
+
+# test where to look for source tarballs
+if [ -n "$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf)" ]; then
+    TAR_DIR="$(grep '^tarball-dir' /etc/git-buildpackage/gbp.conf | cut -d '=' -f2)"
+    if [ -n "$( echo $TAR_DIR | grep '^/')" ]; then
+	TAR_PATH=$TAR_DIR
+    else
+	TAR_PATH=$CUR_DIR/$TAR_DIR
+    fi
+else
+    TAR_PATH=$CUR_DIR/../
+fi
+
+echo "Work dir:   $LIGHT_GRAY$CUR_DIR$NO_COL"
+echo "Cache dir:  $LIGHT_GRAY$CACHE_DIR$NO_COL"
+echo "Tarballs:   $LIGHT_GRAY$TAR_PATH$NO_COL \n"
+
+# if package has source in git repo (src_git not empty)
+if [ -n "$SRC_GIT" ]; then
+
+    # if there is cached clone then pull if not then fresh clone
+    if [ -d $CACHE_DIR/$DEB_SRC ]; then
+	cd $CACHE_DIR/$DEB_SRC
+	echo "Pulling updates from repo: \n"
+	git pull --progress
+    else 
+	echo "Cloning repo: \n"
+	git clone --progress $SRC_GIT $CACHE_DIR/$DEB_SRC
+	cd $CACHE_DIR/$DEB_SRC
+    fi
+
+    # when in cache directory - get tag ids
+    if [ -n "$1" ]; then
+	TAG=$1
+	BLD_VER=$2
+    else
+	TAGS=`git show-ref --tags | wc -l`
+	GIT_ID=`git log --pretty=%h -n1`
+	if [ $TAGS -gt 0 ]; then 
+	    TAG=`git describe --tags`
+	    GIT_VER=`echo $TAG | cut -d '-' -f1`
+	    GIT_REL=`echo $TAG | cut -d '-' -f2`
+	    if [ -n $GIT_REL ]; then 
+		TAG=HEAD
+		BLD_VER=$GIT_VER-$GIT_REL~$GIT_ID
+	    else
+		BLD_VER=$GIT_VER
+	    fi
+	else
+	    TAG=HEAD
+	    if [ -f .git/refs/heads/$SRC_BRANCH ]; then 
+		TAG=$SRC_BRANCH
+	    fi
+ 	    GIT_VER=0
+ 	    GIT_REL=`git rev-list --all | wc -l`
+ 	    BLD_VER=$GIT_VER-$GIT_REL~$GIT_ID
+	fi
+    fi
+    echo "Tag:        $RED$TAG$NO_COL"
+    echo "Build:      $CYAN$BLD_VER$NO_COL"
+fi
+
+# go back to working directory
+cd $CUR_DIR
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+git --no-pager push -v --tags
+
+if ! git show-ref --tags --quiet --verify -- "refs/tags/upstream/$(echo $BLD_VER | sed 's/~/_/g')"
+then
+    if [ ! -r $TAR_PATH$DEB_SRC\_$BLD_VER.tar.gz ]; then
+	echo "Orig tarball not found. Creating new from cached repo"
+	cd $CACHE_DIR/$DEB_SRC
+	git archive --format tar --prefix $DEB_SRC-$BLD_VER/ $TAG | gzip -9 > $TAR_PATH$DEB_SRC\_$BLD_VER.orig.tar.gz
+	cd $CUR_DIR
+    fi
+    echo "Importing source tarball"
+    git-import-orig -u$BLD_VER $TAR_PATH$DEB_SRC\_$BLD_VER.orig.tar.gz
+    git push $VCS_GIT --tags
+fi
+
+echo "Wersja do zbudowania: $BLD_VER-$DEB_REL"
+echo "Wersja bieżąca: $DEB_VER"
+
+if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
+    DEB_BLD=1
+    dch -bpMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+    echo "New upstream version import: $CYAN$BLD_VER-1~$DIST$DEB_BLD$NO_COL \n"
+else
+    echo "Wersje równe - robimy tylko builda: $(echo $DEB_VER | sed 's/~/_/g')"
+    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+    if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
+    then
+	DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+	dch -bpMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+    fi
+    echo "New build: $CYAN$BLD_VER-1~$DIST$((DEB_BLD+1))$NO_COL\n"
+fi
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+
+git-buildpackage --git-retag --git-tag-only
+
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git --no-pager push -v origin master:refs/heads/master
+
+
+for x in `debian-distro-info --stable` `debian-distro-info --devel` `ubuntu-distro-info --stable` `ubuntu-distro-info --devel` 
+do
+
+    echo $x
+
+    DIST=$x
+
+    # this will detect unused distros and omit them
+    if [ $(git branch | grep "$DIST") ]; then
+
+	echo " \nPrepare for: $CYAN$DIST$NO_COL \n "
+
+	if [ -z "${ARCH}" ]; then
+	    : ${ARCH:="$(dpkg --print-architecture)"}
+	fi
+
+	DEBOOTSTRAPOPTS="--debootstrapopts --keyring=/usr/share/keyrings/neutrico/master-keyring.gpg"
+	if [ -n "$(debian-distro-info --all | grep $DIST)" ]; then
+	    DIST_TYPE="debian"
+	elif [ -n "$(ubuntu-distro-info --all | grep $DIST)" ]; then
+	    DIST_TYPE="ubuntu"
+	fi
+
+	if [ ! -d /var/cache/pbuilder/base-$DIST-$ARCH.cow ]; then	
+	    echo "$RED Pobranie i instalacja obrazu dystrybucji: $DIST$NO_COL"
+	    DIST=$DIST ARCH=$ARCH git-pbuilder create --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf --override-config $DEBOOTSTRAPOPTS
+	else
+	    echo "$RED Aktualizacja obrazu dystrybucji: $DIST$NO_COL"
+	    DIST=$DIST ARCH=$ARCH git-pbuilder update --distribution $DIST --configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf --override-config $DEBOOTSTRAPOPTS
+	fi
+
+ 	git checkout -q $DIST
+
+	echo Version: $DEB_VER
+	echo Release: $DEB_REL
+	
+	if [ $BLD_VER-$DEB_REL != $DEB_VER ]; then
+	    DEB_BLD=1
+	    dch -bpMD $DIST -v $BLD_VER-1~$DIST$DEB_BLD --force-distribution "New upstream version import"
+	    rm -rf ../$DEB_SRC\_$DEB_BASE_VER.orig.*
+	else
+	    DEB_BLD=`echo $DEB_REL | grep -o '[0-9]*.$'`
+	    if git show-ref --tags --quiet --verify -- "refs/tags/debian/$(echo $DEB_VER | sed 's/~/_/g')"
+	    then
+		dch -bpMD $DIST -v $BLD_VER-1~$DIST$((DEB_BLD+1)) --force-distribution "New build"
+	    fi
+	fi
+
+	git add .
+	git commit --allow-empty --allow-empty-message -m '' .
+	git merge master
+	git add .
+	git commit --allow-empty --allow-empty-message -m '' .
+	git push $VCS_GIT
+
+	if [ -f .git/refs/heads/$DIST ]; then 
+	    echo " \nBuilding for: $CYAN$DIST$NO_COL \n "
+	    git checkout $DIST
+	    TAG="git push --tags"
+
+	    GIT_PBUILDER_OPTIONS="--configfile /etc/pbuilder/$DIST_TYPE-$DIST.conf" DIST="$DIST" git-buildpackage \
+		--git-pbuilder \
+		--git-dist=$x \
+		--git-arch=amd64 \
+		--git-verbose \
+		--git-retag \
+		--git-tag \
+		--git-posttag="$TAG"
+
+	    for p in $(grep Package: debian/control | cut -d ' ' -f2)
+	    do 
+		echo Including deb package to repository: $p
+		reprepro --confdir /etc/reprepro/$DIST -s includedeb $DIST ../$p\_*$DIST*\_*.deb && rm -rf ../$p\_*$DIST*;
+	    done
+	fi
+    fi
+done
+
+git checkout master
+git add .
+git commit --allow-empty --allow-empty-message -m '' .
+git push $VCS_GIT --all
+git push $VCS_GIT --tags
+
