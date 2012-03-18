@@ -1,0 +1,15 @@
+Source: #PACKAGE#
+Section: #SECTION#
+Priority: extra
+Maintainer: #USERNAME# <#EMAIL#>
+Build-Depends: #BUILD_DEPS#
+Standards-Version: #POLICY#
+Homepage: #HOMEPAGE#
+Vcs-Git: git://github.com/marcinant/deb-#PACKAGE#.git
+Vcs-Browser: https://github.com/marcinant/deb-#PACKAGE#
+
+Package: #PACKAGE#
+Architecture: all
+Depends: ${misc:Depends}
+Description: #SHORT_DESCRIPTION#
+ #LONG_DESCRIPTION#
